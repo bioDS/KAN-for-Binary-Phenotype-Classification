@@ -1,0 +1,456 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{cleveref}
+\usepackage{comment}
+\usepackage{multirow} 
+\usepackage{todonotes}
+\usepackage{float}
+\usepackage{cite}
+\usepackage{booktabs}
+\graphicspath{{images/}} 
+
+% Use numeric citation format
+\usepackage[style=numeric, citestyle=numeric]{biblatex} 
+\addbibresource{references.bib} 
+
+
+\AtEveryBibitem{
+  \clearfield{url} 
+  \clearfield{urldate} 
+  \clearfield{isbn} 
+  \clearfield{note} 
+  \clearfield{abstract} 
+  \clearfield{keywords} 
+  \clearlist{language} 
+}
+
+
+\DeclareNameAlias{sortname}{family-given}
+
+\renewbibmacro*{url+urldate}{}
+
+\title{Kolmogorov-Arnold Networks for learning non-additive fitness landscapes}
+\author{Lilin Zhang \\
+       \and Kieran Collienne\\
+       \and Michael Witbrock\\
+       \and Alex Gavryushkin}
+\date{\today}
+
+
+\begin{document}
+
+\maketitle
+
+
+\todo{This version is written based on the theme of "Kolmogorov-Arnold Networks for learning non-additive fitness landscapes".
+
+Because our data is binary phenotype (0 and 1), not continuous values, we are going to write it based on Kolmogorov-Arnold Networks for Complex phenotype classification.}
+
+\section*{Abstract}
+
+Learning non-additive fitness landscapes is crucial for understanding gene interactions and their complex effects on fitness. Kolmogorov-Arnold Networks is a model proposed by the MIT team. Inspired by the Kolmogorov-Arnold theorem, they replace traditional linear weights with spline-parameterized univariate functions. As a powerful alternative to multilayer perceptrons, it has  attracted widespread attention in the AI field. This paper explores the application of KANs in learning non-additive fitness landscapes. To this end, we simulated data using real SNV data and compared KAN and three other models (Linformer, MLP, and Logistic regression) under noise-free and noise-containing conditions.
+
+The experimental results show that KAN is comparable to the existing best model Linformer in terms of balanced accuracy, and shows stronger robustness and time efficiency under noisy conditions. Although KAN is not as computationally efficient as MLP and Logistic regression, its robustness and accuracy are significantly better, highlighting its potential and advantages in learning non-additive fitness landscapes.
+
+\todo[inline]{AG: We should not talk about gout at all in this paper -- I've updated the title, so let's use the term fitness landscapes.
+This term is common in biology (SNV effects, GWAS, etc.), chemistry (binding prediction), computing (email spam detection), medicine (decease prediction from symptoms), etc.
+In all these fields, they add interaction effects into an additive model -- see glinternet, xyz, pint, etc.; this doesn't work for large $p$ small $n$ type of problems because linear model typically is an as good approximation as it gets -- see Kieran's PLOS ONE paper.
+So the first problem is how to simulate the data, where no such approximations is possible -- this is the first question we answer in this paper but providing one way of doing it, inspired by systems biology.
+The second problem is what algorithms should we use to fit such model -- this is the second and main question we answer.}
+\todo[inline]{K: Simulations aren't gout prediction, we are just predictign a ``simulated complex trait"}
+
+\todo[inline]{Lilin: The Abstract need to be rewrite when all other parts finished
+
+\textbf{Research background and purpose:} In evolutionary biology and genetics, fitness landscapes are used to describe how genotypes affect the fitness of organisms.---------
+
+\textbf{Methods:} This paper presents a novel application of Kolmogorov-Arnold Networks (KANs) to simulating complex trait prediction, leveraging their adaptive activation functions to enhance predictive modeling. Inspired by the Kolmogorov-Arnold representation theorem, KANs replace traditional linear weights with spline-parameterized univariate functions, enabling them to dynamically learn activation patterns.
+
+\textbf{Results:} Experimental results show that KANs significantly outperform existing models (A, B, C, and D) in complex trait prediction tasks, demonstrating its superior performance in capturing nonlinear and non-additive effects.
+
+\textbf{Conclusion:} KANs provides a powerful new tool for complex trait prediction, which improves prediction accuracy by learning gene interactions in non-additive fitness landscapes. This study opens up a new direction for the application of KANs on genomic data and shows its great potential in the field of predictive analysis.
+
+}
+
+
+\textbf{Keywords:} Fitness Landscape, Epistasis, Deep Learning, Kolmogorov-Arnold Networks, Non-additive Genetic Effects
+
+
+\section{Introduction}
+
+
+%It's worth talking about the fact that KANs are doing well with long distance %interactions here, which are relevant to a number of problems and the kind of %thing Transformers are expected to be good at. It's interesting that KAN is %just as good here, is there a reason they can do this well?
+
+\todo{"Theme Introduction:"}
+
+The concept of the fitness landscape, first introduced by Sewell Wright in 1932 \parencite{wright1932roles}, describes the complex relationship between genotype or phenotype and fitness. Estimating this complex relationship, or constructing fitness landscapes, is one of the central goals of evolutionary biology \parencite{patton2022hybridization}. One of the basic ingredients that characterize the structure of fitness landscapes is epistasis, which can be broadly defined as the interaction between the effects of mutations at different loci.\parencite {ferretti2016measuring}. As a common form of non-additive effect, epistasis complicates phenotype prediction by making it difficult to rely solely on additive genetic effects. The epistatic interactions between mutations significantly increase the complexity of the fitness landscape, which is often considered a major challenge in predicting evolutionary processes \parencite{diaz2023global}. Therefore, learning non-additive fitness landscapes is crucial for understanding gene interactions and their impact on fitness.
+
+\todo{"Describe the background:"}
+
+Given the complexity of fitness landscapes, particularly in high-dimensional settings with non-additive effects like epistasis, traditional and even modern machine learning models face significant challenges in capturing these interactions. These challenges are especially pronounced in large $p$ small $n$ scenarios, where linear models often fail to capture intricate interaction effects \parencite{eichler2010missing}. This assumption overlooks the complex epistatic interactions between genetic loci that often play crucial roles in the manifestation of phenotypes, especially in conditions influenced by multiple genes.
+
+\todo{Traditional models/ existing models}
+
+Although Transformer-based models (Linformer \parencite{wang2020linformer}) have been shown to have advantages in accuracy over traditional models such as MLP and Logistic regression when processing large-scale genetic data, they still have shortcomings in terms of computing resources and time efficiency \parencite{kieransimulatepaper}. 
+
+
+\todo{KAN}
+
+Kolmogorov-Arnold Networks (KANs) are an innovative neural network architecture designed to replace the traditional multi-layer perceptron (MLP). They have attracted widespread attention from the AI community due to their potential for change \parencite{vaca2024kolmogorov}. The architecture is inspired by the Kolmogorov-Arnold representation theorem \parencite{kolmogorov1961representation, kolmogorov1957representation, braun2009constructive}, which states that any multivariable continuous function can be decomposed into a series of univariate functions and summation operations. Unlike the linear weights of MLP based on the universal approximation theorem, KAN innovatively adopts learnable univariate functions as activation functions and applies them to the edges of the network, thereby enhancing the flexibility and adaptability of the network. \textcite{liu2024kankolmogorovarnoldnetworks} uses extensive numerical experiments to demonstrate that KANs can improve over the accuracy and interpretability of MLPs, at least on small-scale AI and Science tasks. But the benefits for a wider range of machine learning tasks remain unclear. Some work has shown that KANs have advantages in specific domains, including medical image segmentation using U-Net \parencite{li2024u}, keyword Spotting \parencite{xu2024effective} and time series forecasting \parencite{vaca2024kolmogorov}. The performance of KANs in learning non-additive fitness landscapes has not been fully evaluated.
+
+\todo{"Specify the target:"}
+
+Therefore, this study aims to assess the performance  of KANs in learning non-additive fitness landscapes. We generated a simulated dataset using real SNV sequences from the GISAID hCoV-19 dataset. By comparing KANs with Logistic Regression, MLP, and Linformer, we evaluated the ability of these models to capture non-additive interactions when dealing with high-dimensional data.
+
+\todo{"Paper Structure:"}
+
+The structure of this paper is as follows: Section 2 covers the materials and methods, including problem formulation, dataset construction, and KAN network. Section 3 describes the experimental setup, including model comparisons and training procedures. Section 4 presents the results and analysis, and Section 5 concludes with implications for future research.
+
+\section{Materials and Methods}
+
+\subsection{Problem Formulation}
+
+This study aims to capture the complex interactions between genetic loci using deep learning models and to predict the target phenotype (e.g., 0 or 1) .
+
+Specifically, given a genotype sequence \( x \) consisting of SNVs:
+\begin{equation}
+x = [x_1, x_2, \dots, x_N]
+\end{equation}
+where \( N \) is the number of SNVs in the sample.
+
+Through deep learning models, we aim to predict the target phenotype \( y \), i.e., whether the individual exhibits the phenotype. The phenotype prediction problem can be formulated as:
+\begin{equation}
+\hat{y} = f(x)
+\end{equation}
+where \( f \) is the deep learning model, and \( \hat{y} \) represents the estimated phenotype given the genotype sequence \( x \).
+
+
+\subsection{Dataset Construction Method}
+\label{sec:dataset-construction}
+In our previous work \parencite{kieransimulatepaper}, we simulated phenotypes using a simple non-linear model. This model allowed us to simulate phenotypes with varying levels of complexity and noise. For detailed information on the data simulation model, please refer to \parencite{kieransimulatepaper}. This study utilizes the same simulation approach, briefly described below, to generate data for evaluating different models in learning non-additive effects from genetic data.
+
+
+Gene expression is modeled as a linear combination of the presence or absence of specific SNVs, where each SNV \( v_i \) affects gene expression with a coefficient \( \beta_i \). The gene expression \( e \) is expressed as:
+\begin{equation}
+e = \beta_0 + \beta_1 v_1 + \cdots + \beta_k v_k
+\end{equation}
+
+Binary gene effects occur when \( e \) exceeds a threshold, and we define a binary trait \( g \) as present if and only if:
+\begin{equation}
+g \iff \beta_0' + \beta_1 v_1 + \cdots + \beta_k v_k > 0
+\label{eq_original1}
+\end{equation}
+where $\beta'_0$ is $\beta_0$ after accounting for the non-zero threshold for the effect $g$.
+To simulate non-additive fitness landscapes, we define the complex trait \( T \) using a decision tree approach that combines multiple binary effects. The trait \( T \) is represented through logical combinations of binary effects, such as:
+\begin{equation}
+T = (g_1 \land g_2) \lor \neg g_3
+\label{eq_original2}
+\end{equation}
+In this approach, we combine multiple regulatory functions ($g_1, \dots, g_k$) into a logical formula structured as a decision tree. The decision tree is constructed by recursively splitting the set of functions $S = \{g_1, \dots, g_k\}$. At each step, a node is randomly assigned a logical operator ($\land$ or $\lor$) to create two new branches. This process continues until each leaf node contains a single gene function. Additionally, 50\% of the leaf nodes are negated at random to introduce non-linearity. This decision tree formulation effectively models the non-linear interactions that define non-additive fitness landscapes.
+
+Noise can be added to the output of the linear expression function \eqref{eq_original1} and the logical function\eqref{eq_original2}. In both cases, a noise parameter is used as the probability of returning a random value instead of the true output in both cases. This random output has a 50\% probability of being true or false in both cases. 
+
+In this study, for each sample, we simulated 128 gene functions (\eqref{eq_original1}), each consisting of 128 SNVs. Biological data are often affected by various noise, such as experimental errors and inaccurate measurements. In addition, noise may mask or modify certain genetic effects, helping us detect whether the model can still learn relevant non-additive genetic information. Therefore, in this study, we also introduced noise into the data, using noise parameters 0.0 and 0.2.
+
+Finally, the dataset was constructed based on GISAID hCoV-19 \parencite{elbe2017data}, using 100,000 SNV sequence samples, each with a length of 29892. A total of 24 datasets were constructed: 12 for each noise parameter.
+
+
+
+\begin{comment}
+
+A Multi-Layer Perceptron (MLP) is a fully connected feedforward neural network consisting of multiple layers of nodes (neurons). Each node in a layer is connected to every node in the subsequent layer, and the node applies a nonlinear activation function to the weighted sum of its inputs.
+
+Universal Approximation Theorem \parencite{HORNIK1989359} provides foundations to the popularity of MLPs. The theorem states that a feedforward network with a single hidden layer containing a finite number of neurons can approximate any continuous function on compact subsets of \(\mathbb{R}^n\), given appropriate activation functions. Mathematically, an MLP with \(L\) layers can be expressed as:
+\begin{equation}
+MLP(x) = \sigma_L(W_L \sigma_{L-1}(W_{L-1} \cdots \sigma_1(W_1 x + b_1) \cdots + b_{L-1}) + b_L),
+\end{equation}
+where:
+\begin{itemize}
+  \item \(x\) is the input vector.
+  \item \(W_l\) and \(b_l\) are the weight matrix and bias vector for the \(l\)-th layer.
+  \item \(\sigma_l\) is the activation function for the \(l\)-th layer.
+\end{itemize}
+\end{comment}
+
+\subsection{Kolmogorov–Arnold Networks}
+
+The Kolmogorov-Arnold Representation Theorem (KART) \parencite{kolmogorov1961representation} states that if \( f \) is a multivariate continuous function on a bounded domain, then \( f \) can be written as a finite composition of continuous functions of a single variable and the binary operation of addition. More specifically, for a smooth \( f : [0,1]^n \rightarrow \mathbb{R} \),:
+\begin{equation}
+f(\mathbf{x}) = f(x_1, \dots, x_n) = \sum_{q=0}^{2n} \Phi_q \left( \sum_{p=1}^{n} \phi_{q,p}(x_p) \right)
+\end{equation}
+
+
+%\todo{This seems to require that f be a function of inputs in the range [0,1], is that right?}
+
+where \(\phi_{q,p} : [0, 1] \to \mathbb{R}\) and \(\Phi_q : \mathbb{R} \to \mathbb{R}\). They showed that the only true multivariate function is addition, since every other function can be written using univariate functions and sum \parencite{liu2024kankolmogorovarnoldnetworks}.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=8cm]{images/1.jpg}
+\caption{Kolmogorov-Arnold Representation Theorem.}
+\label{fig:KART}
+\end{figure}
+
+The theorem is highly inspiring for machine learning as it simplifies the task of learning high-dimensional functions into learning compositions of several one-dimensional functions. Specifically, a two-layer network structure with an intermediate layer width of $2n+1$ can approximate any function (where $n$ is the number of input elements). As illustrated in Figure \ref{fig:KART}, a KAN structure based on the KART theorem for the case where $n=2$ provides a visualization of how the theorem can be represented. However, these one-dimensional functions may exhibit non-smooth properties in real applications, making them unlearnable in practice \parencite{poggio2020theoretical}. To address this issue, Ziming Liu et al. \parencite{liu2024kankolmogorovarnoldnetworks} innovatively extended the KAN design to allow arbitrary depth and width, making the model more flexible. In other words, KANs are no longer limited to two-layer structures but can include any number of layers, with each layer having an arbitrary number of nodes. Specifically, a KAN layer with $n_{\text{in}}$-dimensional input and $n_{\text{out}}$-dimensional output can be represented as a 1D singular matrix.
+% \todo{`broke through' sounds odd, maybe just say that they increased the depth and width.}
+%\todo{maybe compare this to the fact that deep neural networks are effective even though single-layer MLPs are %universal approximators.}
+\begin{equation}
+\Phi = \{\phi_{q,p}\}, \quad p = 1, 2, \dots, n_{\text{in}}, \quad q = 1, 2, \dots, n_{\text{out}},
+\end{equation}
+where \(\phi_{q,p}\) is the activation function with trainable parameters.
+Then given an input vector \(x_0 \in \mathbb{R}^{n_0}\), a KAN with L layers can be expressed as:
+
+\begin{equation}
+\text{KAN}(x) = (\Phi_{L-1} \circ \Phi_{L-2} \circ \cdots \circ \Phi_0)x.
+\end{equation}
+
+KAN learns the activation function \(\phi\) during training. In fact, \(\phi\) uses a structure similar to residual connection, as shown below:
+\begin{equation}
+\phi(x) = w_b b(x) + w_s \text{spline}(x)
+\end{equation}
+%KAN includes a basis function \(b(x)\) such that the activation %function \(\phi(x)\) is the sum of the basis function \(b(x)\) and the %spline function:
+where \(b(x)\) represents the sigmoid linear unit (SiLU) function:
+\begin{equation}
+b(x) = \text{silu}(x) = \frac{x}{1 + e^{-x}}
+\end{equation}
+\( w_b \) and \( w_s \) are the weights of the functions \(b(x)\) and \(spline(x)\), \(spline(x)\) is a B-spline function composed of multiple B-spline basis functions:
+\begin{equation}
+\text{spline}(x) = \sum_{i=0}^{s} c_i B_i^k(x),
+\end{equation}
+
+\begin{itemize}
+
+\item The degree of the spline function \(spline(x)\) \( k \) determines the highest degree of the piecewise polynomials that make up the spline.
+
+\item The \( i \)-th B-spline basis function \( B_i^k(x) \) is a piecewise polynomial function defined over a sequence of knots (knot vector) and determined by the degree \( k \). These functions are non-zero only over certain ranges of knots, providing local control and reduced computational complexity. The knot vector is a set of real numbers in non-decreasing order that define the intervals and bounds of the B-spline basis functions. 
+
+
+\item Each basis function \( B_i^k(x) \) is multiplied by a corresponding coefficient \( c_i \), which serves as a control point in the spline curve. The coefficients \( c_i \) are real numbers that determine the shape of the spline curve. 
+
+\item The variable \( s \) represents the number of B-spline basis functions required to generate the spline curve.
+
+\item Basis functions are constructed recursively using the de Boor-Cox recursive formula, which is the most widely used definition for constructing B-splines \parencite{de1972calculating} \parencite{cox1972numerical}. Starting from \( k=0 \), where \( B_i^0(x) \) are defined as step functions:
+    \begin{equation}
+    B_i^0(x) = 
+    \begin{cases} 
+    1 & \text{if } t_i \leq x < t_{i+1}, \\
+    0 & \text{otherwise}.
+    \end{cases}
+    \end{equation}
+    
+For higher degrees \( k > 0 \), the basis functions evolve according to the de Boor-Cox recursive formula:
+    \begin{equation}
+    B_i^k(x) = \frac{x - t_i}{t_{i+k} - t_i} B_i^{k-1}(x) + \frac{t_{i+k+1} - x}{t_{i+k+1} - t_{i+1}} B_{i+1}^{k-1}(x),
+    \end{equation}
+    allowing for the construction of smoother curves and more complex shapes. 
+    
+\end{itemize}
+
+
+
+\subsection{KAN for Learning Non-Additive Fitness Landscapes}
+
+We frame the problem of learning Non-Additive Fitness Landscapes as a supervised learning task with input-output pairs \( \{ x, \hat{y} \} \), where \( x \) represents the genotype sequence and \( \hat{y} \) represents the target phenotype (0 or 1). The goal is to learn a mapping function \( f \) that takes genotype data \( x \) and predicts the phenotype \( \hat{y} \), capturing the complex, non-additive interactions between genetic loci:
+\begin{equation}
+\hat{y} = f(x)
+\end{equation}
+
+In this framework, we utilize a Kolmogorov-Arnold Network (KAN) to model the non-additive interactions between genetic loci. For simplicity, we represent a 2-layer KAN structure, where the transformation is defined as:
+\begin{equation}
+\hat{y} = \text{KAN}(x) = (\Phi_2 \circ \Phi_1)(x)
+\end{equation}
+where \( \Phi_1 \) and \( \Phi_2 \) are activation functions learned during the training process.
+
+
+
+\section{Experimental Setup}
+
+\subsection{Comparison Models}
+In this experiment, we compare the performance of KAN with three other models: Linformer \parencite{wang2020linformer}, Logistic Regression, and MLP \parencite{hornik1989multilayer}.
+
+
+\paragraph{Linformer}
+
+We use Linformer as a comparison model because it was found to be the best performer for this specific task in our previous research \parencite{kieransimulatepaper} \parencite{collienne2023machine} \parencite{Elmes2022.07.07.499217}. By comparing KAN with Linformer, we aim to evaluate the performance of KAN relative to the current best models.
+
+\paragraph{MLP}
+In recent studies \parencite{liu2024kankolmogorovarnoldnetworks}, KANs have been considered as a promising alternative to MLPs (Multi-layer Perceptrons). By comparing KANs and MLPs, we aim to test whether the advantages of KANs over MLPs observed in previous studies still apply to our task and quantify the extent of the performance difference between the two models.
+
+\paragraph{Logistic regression}
+Logistic regression is a linear model. By comparing KAN with logistic regression, we aim to investigate whether KAN can model nonlinear and interactive effects that linear models cannot capture.
+
+
+
+\subsection{Experimental Dataset Split }
+
+We divide the dataset constructed in Section \ref{sec:dataset-construction} into a training set (model training), a validation set (parameter tuning and model selection), and a test set (evaluating the final model performance) in a ratio of 63\%:7\%:30\%. 
+
+\begin{table}[!h]
+    \centering
+    \caption{Hyperparameter settings for different models}
+    \label{tab:model_hyperparams}
+    \begin{tabular}{l c}
+        \hline
+        \multicolumn{2}{c}{Linformer} \\
+        \hline
+        Embedding layer dimension & $\{2^i \mid i \in [4, 8]\} \cap \mathbb{N}$ \\
+        Number of layers & $\{1, 2, 3, 4, 5, 6, 7, 8\}$ \\
+        Number of attention heads & $\{2^i \mid i \in [0, 3]\} \cap \mathbb{N}$ \\
+        Linformer k & $\{2^i \mid i \in [4, 8]\} \cap \mathbb{N}$ \\
+        Dimension of the feedforward layer & $\{2^i \mid i \in [7, 11]\} \cap \mathbb{N}$ \\
+        \hline
+        \multicolumn{2}{c}{KAN} \\
+        \hline
+        Grid size & $\{5n \mid n=1, 6\} \cap \mathbb{N}$ \\
+        Spline order & $\{2, 3, 4, 5\}$ \\
+        Number of hidden layers & $\{1, 6\}$ \\
+        Number of hidden units & $\{2^i \mid i \in [1, 10]\} \cap \mathbb{N}$ \\
+        \hline
+        \multicolumn{2}{c}{MLP} \\
+        \hline
+        Number of hidden layers & $\{1, 6\}$ \\
+        Number of hidden units & $\{2^i \mid i \in [1, 10]\} \cap \mathbb{N}$ \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\subsection{Hyperparameter Settings}
+In this experiment, we used Ray Tune to select hyperparameters for the MLP, KAN, Logistic Regression, and Linformer models, with the lowest validation loss as the evaluation metric. We used the ASHA scheduler \parencite{li2018massively} for scheduling in Ray Tune \parencite{RayTuneFast}. The hyperparameter search was conducted over 60 hours, with a sample size of 80. The common hyperparameters included learning rate and batch size. The learning rate was sampled from a log-uniform distribution between $10^{-7}$ and $10^{-1}$, and the batch size was selected from powers of 2 between $2^2$ and $2^6$. The hyperparameter search range for each model is detailed in Table \ref{tab:model_hyperparams}. 
+
+\subsection{Model Training}
+All models were trained using NVIDIA RTX A6000 GPUs, and Balanced Accuracy was selected as the main evaluation metric. Balanced Accuracy (BA) is defined as:
+
+\begin{equation}
+\text{Balanced Accuracy} = \frac{1}{2} \left( \frac{TP}{TP + FN} + \frac{TN}{TN + FP} \right)  
+\end{equation}
+
+where $TP$, $TN$, $FP$, and $FN$ represent True Positives, True Negatives, False Positives, and False Negatives, respectively. As described in Section \ref{sec:dataset-construction}, this study simulated 12 experimental datasets under both Noise 0.0 and Noise 0.2 conditions, resulting in a total of 24 datasets. Each model conducted two experiments on each dataset, leading to 24 results per model.
+
+
+
+%The best model is selected based on the optimal Balanced Accuracy value on the validation set, %and the Balanced Accuracy of the model on the test set is recorded for model comparison. 
+
+
+
+\begin{figure}[ht]
+    \centering
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{images/3_6w_0.0_24.jpg}
+        \caption{Balanced Accuracy Comparison of Models (Noise 0.0).}
+        \label{box0}
+    \end{minipage}\hfill
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{images/4_6w_0.0_24_0.2.jpg}
+        \caption{Balanced Accuracy Comparison of Models (Noise 0.2).}
+        \label{box0.2}
+    \end{minipage}
+\end{figure}
+
+
+\begin{table}[ht]
+    \centering
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \caption{P-value Table for Pairwise Model Comparisons (Noise 0.0).}
+        \begin{tabular}{@{}ll@{}}
+            \toprule
+            Model Comparison & p-value \\ \midrule
+            KAN vs Linformer      & 0.517   \\
+            KAN vs MLP      & 0.004   \\
+            KAN vs Logistic Regression  & 5.77e-08\\
+            \bottomrule
+        \end{tabular}
+        \label{pvalue0}
+    \end{minipage}\hfill
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \caption{P-value Table for Pairwise Model Comparisons (Noise 0.2).}
+        \begin{tabular}{@{}ll@{}}
+            \toprule
+            Comparison          & P-value \\ \midrule
+            KAN vs Linformer         & 0.9681  \\
+            KAN vs MLP         & 0.0899  \\
+            KAN vs Logistic Regression     & 0.0016  \\
+            \bottomrule
+        \end{tabular}
+        \label{pvalue0.2}
+    \end{minipage}
+\end{table}
+
+ \section{Experimental results and analysis}
+
+We plotted the BA distribution of each model under different noise conditions and recorded the time and GPU usage required for each model. Additionally, to quantify the performance differences between models, we conducted independent sample t-tests and calculated the p-values between the models. 
+
+(1) Noise 0.0
+Figure \ref{box0} shows the distribution of BA for each mgoise. The BA distribution of KAN and Linformer is relatively similar, with KAN's median BA at 0.9229, slightly higher than Linformer's 0.9188. The range and interquartile range (IQR) of KAN are slightly smaller than those of Linformer, and KAN's outliers are closer to the box, indicating that KAN is marginally more stable than Linformer. The IQR of the MLP is not significantly different from that of KAN and Linformer, but its median BA, at 0.8982, is lower than both. The Logistic Regression performs the worst, with a median BA of only 0.8484, the lowest among the four models. Due to its linear structure, Logistic Regression cannot effectively capture the complex nonlinear interactions between genetic loci, leading to its limitations in capturing non-additive genetic effects. Its range and IQR are both larger, indicating the lowest stability. Furthermore, Logistic Regression has several outliers that are far from the box, further highlighting its instability.
+
+The results of the independent sample t-tests are shown in Table \ref{pvalue0}. The p-values between KAN and Logistic Regression, as well as KAN and MLP, are both below 0.05, suggesting that the observed differences in BA are statistically significant and unlikely due to random variation under the null hypothesis that the models perform equivalently. However, the p-value between KAN and Linformer is 0.517, indicating no statistically significant difference between the two in terms of BA.
+
+
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=8cm]{images/5_boxplot_IQR.jpg}
+\caption{Interquartile Range of Models Under Noise 0.0 and Noise 0.2.}
+\label{IQR}
+\end{figure}
+
+
+(2) Noise 0.2
+
+Figure \ref{box0.2} shows the BA distribution of each model with 20\% noise. As the noise increases to noise 0.2, the BA of all models generally decreases. The balanced accuracy (BA) distributions of KAN and Linformer remain close, and the median BA of KAN is 0.6618, slightly higher than that of Linformer (0.6578). The range and IQR of KAN are slightly smaller than those of Linformer,  possibly indicating that KAN is better at capturing non-additive patterns in the data and can maintain higher BA and stability even in the case of high noise. It is worth noting that although the KAN has one outlier, it is located near the box. The median BA of the MLP is 0.6430, lower than that of KAN and Linformer, while the IQR and range are larger, indicating that the ability of MLP to capture non-additive genetic effects in the data is greatly affected by noise. Logistic regression performs the worst, with a median BA of 0.6162 and the largest range and IQR, reflecting the most dispersed data distribution and the lowest stability.
+
+The results of the independent sample t-tests are shown in Table \ref{pvalue0.2}. The p-value between KAN and Logistic Regression is 0.0016, indicating a statistically significant difference in BA. Additionally, the p-value between KAN and MLP is 0.0899, which, although not statistically significant (p-value is less than 0.05), approaches significance. Combining the performance of KAN and MLP on IQR and range, we can conclude that KAN is better than MLP at processing noisy data. The p-value between KAN and Linformer is 0.9681, indicating no statistically significant difference between the two models in terms of BA.
+
+ 
+
+\begin{table}[htbp]
+\centering
+\caption{Time Taken and GPU Usage under Different Noise Conditions}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcc|cc}
+\hline
+ & \multicolumn{2}{c|}{Noise\_0.0} & \multicolumn{2}{c}{Noise\_0.2} \\
+\cline{2-5}
+Model & Time taken (s) & GPU use (MiB) & Time taken (s) & GPU use (MiB) \\
+\hline
+KAN      & 5651.99 & 7649.37  & 1588.75 & 15180.65 \\
+Linformer & 15150.19 & 4078.12  & 35627.05 & 23132.13 \\
+MLP      & 1406.11 & 657.71   & 448.75  & 41.47 \\
+Logistic & 763.01  & 21.15   & 274.57  & 25.80 \\
+\hline
+\end{tabular}%
+}
+\label{Gpuuseandtime}
+\end{table}
+
+
+
+
+
+
+(3) Effect of noise on the model
+
+After introducing noise, the performance of all models dropped, especially in terms of BA. To investigate this further, we recorded the IQR, time consumption, and GPU usage under Noise 0.0 and Noise 0.2 conditions, as shown in figure \ref{IQR} and table \ref{Gpuuseandtime}. As noise increases from 0 to 0.2, the IQR of all models increases, indicating reduced stability when handling noisy data. Differences in stability between models also become more apparent. Figure \ref{IQR} shows that KAN, Linformer, and MLP have similar IQRs under Noise 0.0, but at Noise 0.2, all three models experience a significant increase in IQR. This suggests that KAN demonstrates greater robustness in handling the complexity introduced by noise. In contrast, Linformer and MLP are more sensitive to noise. Logistic Regression, which already has a large IQR (0.04382) under Noise 0.0, sees a further increase to 0.07188 under Noise 0.2, indicating poor robustness.
+
+Noise also has a significant impact on time consumption and GPU usage. When noise is introduced, data complexity increases, resulting in a significant increase in GPU usage for almost all models. In particular, KAN and Linformer saw GPU usage more than double and more than five times, respectively. This suggests that they require more computational resources to handle the complex patterns introduced by noise. After introducing noise, the time consumption for all models except Linformer decreased because they reached optimal BA in fewer epochs. However, this does not indicate faster convergence; rather, the noise makes it more difficult for the models to learn core features, leading to early stopping at a lower BA level.
+
+Under Noise 0.0, KAN required only one-third of the time of Linformer (5651.99 seconds vs. 15150.19 seconds) while achieving a higher BA (0.9229 vs. 0.9188). Under Noise 0.2, although KAN's time is reduced to 1588.75 seconds, Linformer's time consumption sharply increases to 35627.05 seconds, widening the gap between the two models. This shows that, while both KAN and Linformer achieve the best BA performance, KAN's advantage becomes more pronounced under high noise conditions, demonstrating significantly higher robustness and time efficiency, as evidenced by its superior performance in IQR and range. 
+
+In contrast, although MLP and Logistic Regression are more efficient in terms of time (1406.11 seconds and 763.01 seconds) and GPU usage (657.71 MiB and 21.15 MiB), their BA is lower (0.8982 and 0.8484). Both models perform poorly in handling complex data, especially Logistic Regression, which, as a linear model, struggles to capture non-additive interactions. This validates the superiority of KAN as an alternative to MLP in handling non-additive interactions and highlights the need for developing more advanced models capable of better managing complex and nonlinear interactions. 
+
+ \section{Conclusion}
+In this study, we evaluate the performance of four models (KAN, Linformer, MLP, and Logistic Regression) without noise (Noise 0.0) and with noise (Noise 0.2). Experimental results show that KAN exhibits stronger robustness while achieving the best accuracy, especially when dealing with noisy data sets. Specifically, KAN not only reaches a level comparable to the existing best model Linformer in BA, but also shows significant advantages in robustness and time efficiency. Although KAN is not as good as MLP and Logistic Regression in terms of time and space efficiency, it is significantly better than these two models in terms of accuracy and robustness. These findings highlight the importance of exploring the ability of non-traditional network structures such as KANs to learn non-additive fitness landscapes.
+
+Since KAN is a relatively new model, we plan to further optimize its performance in the future and find activation functions more suitable for the task of learning non-additive fitness landscapes. In addition, we will explore how to improve the interpretability of KANs in this field.
+
+
+
+
+\printbibliography 
+
+\end{document}
